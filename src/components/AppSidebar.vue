@@ -7,6 +7,7 @@ import {
     IconLayoutDashboard,
     IconPackages,
     IconReceipt2,
+    IconRoute,
     IconShieldCheck,
     IconTable,
     IconTruckDelivery,
@@ -14,13 +15,15 @@ import {
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { active, pedidoItens, rows } from '@/lib/store';
+import { active, pedidoItens, rows, trackingPedidos } from '@/lib/store';
+import { ATRASADO } from '@/lib/tracking';
 
 defineProps({ open: Boolean });
 const emit = defineEmits(['close']);
 
 const route = useRoute();
 
+const lateCount = computed(() => trackingPedidos.value.filter((o) => ATRASADO.includes(o.situacao)).length);
 const alertCount = computed(() => rows.value.filter((r) => r.status === 'ruptura' || r.status === 'critico').length);
 
 const groups = computed(() => [
@@ -34,6 +37,12 @@ const groups = computed(() => [
             { title: 'Cobertura & corte', to: '/cobertura', icon: IconShieldCheck, badge: alertCount.value || null },
             { title: 'Estoque', to: '/estoque', icon: IconPackages },
             { title: 'Fábrica', to: '/fabrica', icon: IconBuildingFactory2 },
+        ],
+    },
+    {
+        label: 'Pedidos',
+        items: [
+            { title: 'Tracking de pedidos', to: '/tracking', icon: IconRoute, badge: lateCount.value || null },
             { title: 'Pedidos cortados', to: '/pedidos', icon: IconTruckDelivery, count: pedidoItens.value.length || null },
         ],
     },
