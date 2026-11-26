@@ -1,6 +1,6 @@
 # Painel de Cobertura
 
-Dashboard (visual do TryPost) para a planilha diária `PAINEL_COBERTURA_OFICIAL.xlsx`.
+Dashboard (visual do TryPost) para a planilha diária `PAINEL_COBERTURA_OFICIAL.xlsx` e o tracking de pedidos `TRACKPEDIDOS_*.csv`.
 
 ## Como usar
 1. Dê dois cliques em **Abrir Painel.bat** (ou rode `npm install` e `npm run dev`).
@@ -17,6 +17,17 @@ então mudar a ordem das colunas não quebra o painel.
 - **Atenção**: 1x a 2x
 - **Coberto**: ≥ 2x
 - **Faturado**: nada mais à faturar
+
+## Tracking de pedidos
+Suba o arquivo **TRACKPEDIDOS_dd-mm-aaaa_hh-mm-ss.csv** (export do sistema, separado por `;`) — pode ser 2x ao dia.
+A data/hora da posição vem do nome do arquivo; cada envio fica guardado e é comparado com o anterior
+(novos atrasos, novos cortes, entregues, mudanças de status, pedidos novos).
+
+- **Etapas**: Em liberação → Em separação → Em trânsito → Entregue · Cortado integral · Cancelado (excluído/rejeitado/devolvido).
+- **Prazos**: expedição em até **5 dias** da solicitação (emissão do pedido) e entrega em até **5 dias** da expedição
+  (se ainda não expediu, conta a partir do prazo de expedição). Dá para alternar entre dias úteis (seg–sex) e corridos.
+- **Em atraso**: expedição atrasada (não expediu dentro do prazo) ou entrega atrasada (expediu e não entregou no prazo).
+- **Vence em breve**: falta 1 dia ou menos para o prazo da etapa atual.
 
 ## Pedidos cortados
 Suba também a planilha **Corte de Pedidos** (uma aba por cliente, colunas `Código SKU`, `Descrição`, `Status atual`,

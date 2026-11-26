@@ -13,6 +13,7 @@ const props = defineProps({
     pageSize: { type: Number, default: 50 },
     maxHeight: { type: String, default: '70vh' },
     clickable: { type: Boolean, default: true },
+    emptyText: { type: String, default: 'Nenhum produto encontrado.' },
 });
 
 const key = ref(props.sortKey);
@@ -97,7 +98,7 @@ const isNum = (col) => col.align === 'right' || (col.align === undefined && col.
                     </td>
                 </tr>
                 <tr v-if="!rows.length">
-                    <td :colspan="columns.length" class="py-10 text-center text-muted-foreground">Nenhum produto encontrado.</td>
+                    <td :colspan="columns.length" class="py-10 text-center text-muted-foreground">{{ emptyText }}</td>
                 </tr>
             </tbody>
         </table>
