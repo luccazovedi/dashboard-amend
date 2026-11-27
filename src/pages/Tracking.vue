@@ -1,6 +1,6 @@
 <script setup>
-import { IconAlertTriangle, IconArrowRight, IconClockExclamation, IconDownload, IconRoute, IconScissors } from '@tabler/icons-vue';
-import { computed, ref } from 'vue';
+import { IconAlertTriangle, IconArrowRight, IconClockExclamation, IconDownload, IconRoute, IconScissors, IconUser } from '@tabler/icons-vue';
+import { computed, ref, watch } from 'vue';
 
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -23,6 +23,19 @@ const vendedor = ref('todos');
 
 const all = trackingPedidos;
 const vendedores = computed(() => [...new Set(all.value.map((o) => shortVendedor(o.vendedor)).filter(Boolean))].sort());
+const resumoVendedor = (v) => {
+    const xs = v === 'todos' ? all.value : all.value.filter((o) => shortVendedor(o.vendedor) === v);
+    return {
+        abertos: xs.filter((o) => ABERTAS.includes(o.etapa)).length,
+        atrasados: xs.filter((o) => ATRASADO.includes(o.situacao)).length,
+        cortados: xs.filter((o) => o.etapa === 'cortado').length,
+    };
+};
+const opcoesVendedor = computed(() => ['todos', ...vendedores.value].map((v) => ({ v, label: v === 'todos' ? 'Todos' : v, ...resumoVendedor(v) })));
+// o vendedor escolhido some da planilha nova → volta para todos
+watch(vendedores, (vs) => {
+    if (vendedor.value !== 'todos' && !vs.includes(vendedor.value)) vendedor.value = 'todos';
+});
 const base = computed(() => all.value.filter((o) => vendedor.value === 'todos' || shortVendedor(o.vendedor) === vendedor.value));
 
 const abertos = computed(() => base.value.filter((o) => ABERTAS.includes(o.etapa)));
@@ -113,7 +126,7 @@ function exportCsv() {
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `tracking-${filtro.value}-${trackingAtivo.value.meta.refAt.slice(0, 16).replace(/[T:]/g, '-')}.csv`;
+    a.download = `tracking-${vendedor.value === 'todos' ? '' : `${normalize(vendedor.value)}-`}${filtro.value}-${trackingAtivo.value.meta.refAt.slice(0, 16).replace(/[T:]/g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
 }
@@ -156,10 +169,36 @@ function exportCsv() {
                 <span v-if="trackingAnterior">comparada com <span class="font-semibold text-foreground">{{ fmtRef(trackingAnterior) }}</span></span>
                 <span v-else>— suba a próxima planilha para ver o que mudou</span>
             </div>
-            <select v-model="vendedor" class="input h-9 w-auto py-0 font-semibold text-foreground">
-                <option value="todos">Todos os vendedores</option>
-                <option v-for="v in vendedores" :key="v" :value="v">{{ v }}</option>
-            </select>
+        </div>
+
+        <!-- filtro por vendedor -->
+        <div class="card mb-6 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="eyebrow flex items-center gap-1.5"><IconUser class="size-3.5" /> Vendedor</h2>
+                <span v-if="vendedor !== 'todos'" class="text-xs text-muted-foreground">
+                    Mostrando só <span class="font-bold text-foreground">{{ vendedor }}</span> —
+                    <button class="font-bold text-primary underline-offset-4 hover:underline" @click="vendedor = 'todos'">limpar filtro</button>
+                </span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <button
+                    v-for="o in opcoesVendedor"
+                    :key="o.v"
+                    :class="[
+                        'flex min-w-0 cursor-pointer flex-col items-start gap-1 rounded-lg border-2 border-foreground px-3 py-2 text-left shadow-xs transition-all hover:shadow-sm',
+                        vendedor === o.v ? 'bg-primary text-primary-foreground' : 'bg-card hover:bg-accent',
+                    ]"
+                    :aria-pressed="vendedor === o.v"
+                    @click="vendedor = o.v"
+                >
+                    <span class="max-w-80 truncate text-sm font-bold">{{ o.label }}</span>
+                    <span class="flex flex-wrap gap-x-2 text-[11px] font-semibold opacity-80">
+                        <span>{{ o.abertos }} em andamento</span>
+                        <span :class="o.atrasados && vendedor !== o.v ? 'text-destructive' : ''">{{ o.atrasados }} atrasados</span>
+                        <span>{{ o.cortados }} cortados</span>
+                    </span>
+                </button>
+            </div>
         </div>
 
         <!-- KPIs -->
