@@ -1,6 +1,6 @@
 <script setup>
-import { IconAlertTriangle, IconArrowRight, IconClockExclamation, IconDownload, IconRoute, IconScissors } from '@tabler/icons-vue';
-import { computed, ref } from 'vue';
+import { IconAlertTriangle, IconArrowRight, IconClockExclamation, IconDownload, IconRoute, IconScissors, IconSquare, IconSquareCheckFilled, IconUser } from '@tabler/icons-vue';
+import { computed, ref, watch } from 'vue';
 
 import DataTable from '@/components/DataTable.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -19,11 +19,48 @@ const dias = (n) => `${n} ${n === 1 ? 'dia' : 'dias'}${state.trackingUteis ? (n 
 
 const q = ref('');
 const filtro = ref('atrasados');
-const vendedor = ref('todos');
+// vendedores marcados (vazio = todos); fica lembrado entre as atualizações
+const VEND_KEY = 'painel-cobertura:tracking-vendedores';
+const lerSelecao = () => {
+    try {
+        return JSON.parse(localStorage.getItem(VEND_KEY)) ?? [];
+    } catch {
+        return [];
+    }
+};
+const selecionados = ref(lerSelecao());
+watch(selecionados, (v) => {
+    try {
+        localStorage.setItem(VEND_KEY, JSON.stringify(v));
+    } catch {
+        /* sem armazenamento local */
+    }
+});
+const todos = computed(() => !selecionados.value.length);
+const doVendedor = (o) => todos.value || selecionados.value.includes(shortVendedor(o.vendedor));
+function toggleVendedor(v) {
+    selecionados.value = selecionados.value.includes(v) ? selecionados.value.filter((x) => x !== v) : [...selecionados.value, v];
+}
 
 const all = trackingPedidos;
 const vendedores = computed(() => [...new Set(all.value.map((o) => shortVendedor(o.vendedor)).filter(Boolean))].sort());
-const base = computed(() => all.value.filter((o) => vendedor.value === 'todos' || shortVendedor(o.vendedor) === vendedor.value));
+const resumo = (xs) => ({
+    pedidos: xs.length,
+    abertos: xs.filter((o) => ABERTAS.includes(o.etapa)).length,
+    atrasados: xs.filter((o) => ATRASADO.includes(o.situacao)).length,
+    cortados: xs.filter((o) => o.etapa === 'cortado').length,
+});
+const opcoesVendedor = computed(() => vendedores.value.map((v) => ({ v, ...resumo(all.value.filter((o) => shortVendedor(o.vendedor) === v)) })));
+// vendedor marcado que não existe na planilha atual sai da seleção
+watch(
+    vendedores,
+    (vs) => {
+        if (vs.length && selecionados.value.some((v) => !vs.includes(v))) selecionados.value = selecionados.value.filter((v) => vs.includes(v));
+    },
+    { immediate: true },
+);
+const base = computed(() => all.value.filter(doVendedor));
+const somaSelecao = computed(() => resumo(base.value));
 
 const abertos = computed(() => base.value.filter((o) => ABERTAS.includes(o.etapa)));
 const atrasados = computed(() => base.value.filter((o) => ATRASADO.includes(o.situacao)).sort((a, b) => b.diasAtraso - a.diasAtraso));
@@ -31,7 +68,7 @@ const cortados = computed(() => base.value.filter((o) => o.etapa === 'cortado').
 const entregues = computed(() => base.value.filter((o) => o.etapa === 'entregue'));
 const pctNoPrazo = computed(() => (entregues.value.length ? entregues.value.filter((o) => o.situacao === 'entregueNoPrazo').length / entregues.value.length : null));
 
-const prevCount = (fn) => (trackingPrev.value ? trackingPrev.value.filter((o) => vendedor.value === 'todos' || shortVendedor(o.vendedor) === vendedor.value).filter(fn).length : null);
+const prevCount = (fn) => (trackingPrev.value ? trackingPrev.value.filter(doVendedor).filter(fn).length : null);
 const delta = (fn, cur) => {
     const p = prevCount(fn);
     return p === null ? null : cur - p;
@@ -113,7 +150,7 @@ function exportCsv() {
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `tracking-${filtro.value}-${trackingAtivo.value.meta.refAt.slice(0, 16).replace(/[T:]/g, '-')}.csv`;
+    a.download = `tracking-${todos.value ? '' : `${selecionados.value.map((v) => normalize(v).slice(0, 12)).join('+')}-`}${filtro.value}-${trackingAtivo.value.meta.refAt.slice(0, 16).replace(/[T:]/g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
 }
@@ -156,10 +193,48 @@ function exportCsv() {
                 <span v-if="trackingAnterior">comparada com <span class="font-semibold text-foreground">{{ fmtRef(trackingAnterior) }}</span></span>
                 <span v-else>— suba a próxima planilha para ver o que mudou</span>
             </div>
-            <select v-model="vendedor" class="input h-9 w-auto py-0 font-semibold text-foreground">
-                <option value="todos">Todos os vendedores</option>
-                <option v-for="v in vendedores" :key="v" :value="v">{{ v }}</option>
-            </select>
+        </div>
+
+        <!-- seletor de vendedores (soma os marcados) -->
+        <div class="card mb-6 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="eyebrow flex items-center gap-1.5"><IconUser class="size-3.5" /> Vendedores <span class="font-semibold normal-case tracking-normal">— marque um ou mais para somar</span></h2>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-outline btn-sm" :disabled="selecionados.length === vendedores.length" @click="selecionados = [...vendedores]">Marcar todos</button>
+                    <button class="btn btn-outline btn-sm" :disabled="todos" @click="selecionados = []">Limpar</button>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <button
+                    v-for="o in opcoesVendedor"
+                    :key="o.v"
+                    :class="[
+                        'flex min-w-0 cursor-pointer items-start gap-2 rounded-lg border-2 border-foreground px-3 py-2 text-left shadow-xs transition-all hover:shadow-sm',
+                        selecionados.includes(o.v) ? 'bg-accent ring-2 ring-primary' : 'bg-card hover:bg-accent/50',
+                    ]"
+                    role="checkbox"
+                    :aria-checked="selecionados.includes(o.v)"
+                    @click="toggleVendedor(o.v)"
+                >
+                    <IconSquareCheckFilled v-if="selecionados.includes(o.v)" class="mt-0.5 size-4 shrink-0 text-primary" />
+                    <IconSquare v-else class="mt-0.5 size-4 shrink-0 text-foreground/40" />
+                    <span class="flex min-w-0 flex-col gap-1">
+                        <span class="max-w-80 truncate text-sm font-bold">{{ o.v }}</span>
+                        <span class="flex flex-wrap gap-x-2 text-[11px] font-semibold text-muted-foreground">
+                            <span>{{ o.abertos }} em andamento</span>
+                            <span :class="o.atrasados ? 'text-destructive' : ''">{{ o.atrasados }} atrasados</span>
+                            <span>{{ o.cortados }} cortados</span>
+                        </span>
+                    </span>
+                </button>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t-2 border-dashed border-foreground/20 pt-3 text-sm">
+                <span class="font-bold">{{ todos || selecionados.length === vendedores.length ? 'Todos os vendedores' : `Soma de ${selecionados.length} ${selecionados.length === 1 ? 'vendedor' : 'vendedores'}` }}:</span>
+                <span><span class="font-black tabular-nums">{{ somaSelecao.pedidos }}</span> pedidos</span>
+                <span><span class="font-black tabular-nums">{{ somaSelecao.abertos }}</span> em andamento</span>
+                <span class="text-destructive"><span class="font-black tabular-nums">{{ somaSelecao.atrasados }}</span> atrasados</span>
+                <span><span class="font-black tabular-nums">{{ somaSelecao.cortados }}</span> cortados</span>
+            </div>
         </div>
 
         <!-- KPIs -->
